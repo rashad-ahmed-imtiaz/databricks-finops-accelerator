@@ -7,14 +7,14 @@ from .preflight import PreflightResult
 from .spark_utils import comment_on_table, load_sql, qname, sql_string
 
 
-def _tag_expr(has_custom_tags: bool, key: str) -> str:
+def _tag_expr(has_custom_tags: bool, key: str, aliases: tuple[str, ...]) -> str:
     if not has_custom_tags:
         return "CAST(NULL AS STRING)"
-    title_key = key[:1].upper() + key[1:]
-    return (
-        f"COALESCE(element_at(u.custom_tags, '{key}'), "
-        f"element_at(u.custom_tags, '{title_key}'))"
+    unique_aliases = list(dict.fromkeys([*aliases, key, key[:1].upper() + key[1:]]))
+    lookups = ", ".join(
+        f"element_at(u.custom_tags, {sql_string(alias)})" for alias in unique_aliases
     )
+    return f"COALESCE({lookups})"
 
 
 def _latest_jobs_cte(has_jobs: bool) -> str:
@@ -53,12 +53,21 @@ def _job_name_expr(has_jobs: bool) -> str:
     return "j.job_name" if has_jobs else "CAST(NULL AS STRING)"
 
 
-def _usage_projection(has_custom_tags: bool, has_jobs: bool) -> str:
-    project = _tag_expr(has_custom_tags, "project")
-    team = _tag_expr(has_custom_tags, "team")
-    owner = _tag_expr(has_custom_tags, "owner")
-    environment = _tag_expr(has_custom_tags, "environment")
-    cost_center = _tag_expr(has_custom_tags, "cost_center")
+def _usage_projection(config: AppConfig, has_custom_tags: bool, has_jobs: bool) -> str:
+    aliases = config.tagging_rules.tag_aliases
+    project = _tag_expr(has_custom_tags, "project", aliases.get("project", ("project",)))
+    team = _tag_expr(has_custom_tags, "team", aliases.get("team", ("team",)))
+    owner = _tag_expr(has_custom_tags, "owner", aliases.get("owner", ("owner",)))
+    environment = _tag_expr(
+        has_custom_tags,
+        "environment",
+        aliases.get("environment", ("environment",)),
+    )
+    cost_center = _tag_expr(
+        has_custom_tags,
+        "cost_center",
+        aliases.get("cost_center", ("cost_center",)),
+    )
     return f"""
 SELECT
     u.usage_date,
@@ -119,8 +128,8 @@ def _daily_cost_template_args(
     return {
         "target_table": qname(config.catalog, config.schema, "daily_cost"),
         "latest_jobs_cte": _latest_jobs_cte(has_jobs),
-        "usage_projection": _usage_projection(has_custom_tags, has_jobs),
-        "fallback_price": f"{config.fallback_dbu_price:.12g}",
+        "usage_projection": _usage_projection(config, has_custom_tags, has_jobs),
+        "fallback_dbu_price": f"{config.fallback_dbu_price:.12g}",
         "job_join": _job_join(has_jobs),
         "lookback_days": str(config.lookback_days),
         "currency_code_sql": sql_string(config.currency_code),
@@ -175,13 +184,11 @@ def create_workload_cost_summary(spark: Any, config: AppConfig, run_id: str) -> 
 def comment_cost_tables(spark: Any, config: AppConfig) -> None:
     comments = {
         "daily_cost": (
-            "Core FinOps fact table built from system.billing.usage. "
-            "estimated_cost is an estimate from list prices or configured fallback DBU price, "
-            "not an exact invoice."
+            "Daily estimated Databricks usage cost built from system.billing.usage. "
+            "Costs are estimated and not a replacement for final invoices."
         ),
         "workload_cost_summary": (
-            "Dashboard-ready workload cost summary over the configured lookback window. "
-            "Attribution quality and notes explain confidence and limitations."
+            "Workload-level cost summary derived from daily_cost."
         ),
     }
     for table_name, comment in comments.items():

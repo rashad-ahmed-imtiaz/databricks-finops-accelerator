@@ -8,9 +8,16 @@ usage_rows AS (
     COALESCE(
         TRY_CAST(p.pricing.effective_list.default AS DOUBLE),
         TRY_CAST(p.pricing.default AS DOUBLE),
-        {fallback_price}
+        {fallback_dbu_price}
     ) AS dbu_price,
-    CASE WHEN p.sku_name IS NULL THEN 'FALLBACK_DBU_PRICE' ELSE 'LIST_PRICES' END AS row_price_source
+    CASE
+        WHEN COALESCE(
+            TRY_CAST(p.pricing.effective_list.default AS DOUBLE),
+            TRY_CAST(p.pricing.default AS DOUBLE)
+        ) IS NOT NULL THEN 'LIST_PRICES'
+        WHEN {fallback_dbu_price} > 0 THEN 'FALLBACK_DBU_PRICE'
+        ELSE 'UNKNOWN'
+    END AS row_price_source
     FROM system.billing.usage u
     LEFT JOIN system.billing.list_prices p
         ON u.cloud = p.cloud
@@ -53,9 +60,13 @@ SELECT
     {display_currency_sql} AS display_currency,
     CASE
         WHEN SUM(CASE WHEN row_price_source = 'LIST_PRICES' THEN 1 ELSE 0 END) > 0
+         AND SUM(CASE WHEN row_price_source <> 'LIST_PRICES' THEN 1 ELSE 0 END) = 0
             THEN 'LIST_PRICES'
         WHEN SUM(CASE WHEN row_price_source = 'FALLBACK_DBU_PRICE' THEN 1 ELSE 0 END) > 0
+         AND SUM(CASE WHEN row_price_source <> 'FALLBACK_DBU_PRICE' THEN 1 ELSE 0 END) = 0
             THEN 'FALLBACK_DBU_PRICE'
+        WHEN COUNT(DISTINCT row_price_source) > 1
+            THEN 'MIXED'
         ELSE 'UNKNOWN'
     END AS price_source,
     CASE

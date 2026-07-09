@@ -2,6 +2,8 @@
 
 Build the first dashboard from the accelerator views rather than raw tables.
 
+The views are designed for the latest accelerator output. `vw_system_table_coverage` filters historical health rows to the latest run so dashboards do not mix old health checks with current summary values.
+
 ## Business Overview
 
 Recommended source views:
@@ -74,3 +76,10 @@ Recommended tiles:
 ## Notes
 
 Cost values are estimates, not invoices. `vw_cost_trend_daily.failed_cost` distributes job-level failed cost across the active days for that job in the lookback window. Utilization signals are review prompts and should be interpreted with workload context.
+
+Use `daily_cost.price_source` to explain pricing confidence:
+
+- `LIST_PRICES`
+- `FALLBACK_DBU_PRICE`
+- `MIXED`
+- `UNKNOWN`

@@ -20,13 +20,15 @@ def priority_score_sql_expr(
     reliability: str = "reliability_score",
     tagging: str = "tagging_score",
     frequency: str = "frequency_score",
+    weights: dict[str, float] | None = None,
 ) -> str:
+    weights = weights or SCORE_WEIGHTS
     return (
-        f"{cost} * {SCORE_WEIGHTS['cost']:.2f}\n"
-        f"                    + {waste} * {SCORE_WEIGHTS['waste']:.2f}\n"
-        f"                    + {reliability} * {SCORE_WEIGHTS['reliability']:.2f}\n"
-        f"                    + {tagging} * {SCORE_WEIGHTS['tagging']:.2f}\n"
-        f"                    + {frequency} * {SCORE_WEIGHTS['frequency']:.2f}"
+        f"{cost} * {weights['cost']:.2f}\n"
+        f"                    + {waste} * {weights['waste']:.2f}\n"
+        f"                    + {reliability} * {weights['reliability']:.2f}\n"
+        f"                    + {tagging} * {weights['tagging']:.2f}\n"
+        f"                    + {frequency} * {weights['frequency']:.2f}"
     )
 
 
@@ -36,6 +38,7 @@ def weighted_priority_score(
     reliability_score: float,
     tagging_score: float,
     frequency_score: float,
+    weights: dict[str, float] | None = None,
 ) -> float:
     """Transparent 0-100 priority score used by SQL and tests.
 
@@ -44,11 +47,12 @@ def weighted_priority_score(
     and platform review conversations.
     """
 
+    weights = weights or SCORE_WEIGHTS
     return round(
-        clamp_score(cost_score) * SCORE_WEIGHTS["cost"]
-        + clamp_score(waste_score) * SCORE_WEIGHTS["waste"]
-        + clamp_score(reliability_score) * SCORE_WEIGHTS["reliability"]
-        + clamp_score(tagging_score) * SCORE_WEIGHTS["tagging"]
-        + clamp_score(frequency_score) * SCORE_WEIGHTS["frequency"],
+        clamp_score(cost_score) * weights["cost"]
+        + clamp_score(waste_score) * weights["waste"]
+        + clamp_score(reliability_score) * weights["reliability"]
+        + clamp_score(tagging_score) * weights["tagging"]
+        + clamp_score(frequency_score) * weights["frequency"],
         6,
     )

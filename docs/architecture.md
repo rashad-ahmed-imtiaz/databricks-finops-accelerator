@@ -41,13 +41,43 @@ cost + utilization + reliability + tagging + attribution
 
 `workload_cost_summary` aggregates spend and DBUs by workload.
 
-`compute_utilization_summary` adds cluster-level utilization signals when `node_timeline` is available.
+`compute_utilization_summary` adds cluster-level utilization signals when `system.compute.node_timeline` is available.
 
 `job_reliability_summary` adds failure, cancellation, retry, duration, and estimated failed-cost signals when Lakeflow tables are available. Failed-cost attribution joins `system.billing.usage` directly by `usage_metadata.job_run_id`; it does not depend on `daily_cost` carrying job-run-level detail.
 
 `tagging_quality_summary` tracks required tag coverage by date and workload.
 
-`optimization_candidates` combines the model into a prioritized review backlog.
+`optimization_candidates` combines the model into a prioritized advisory review backlog.
+
+## Configurable Rules
+
+Business thresholds live in `config/thresholds.yml`:
+
+- utilization thresholds
+- reliability thresholds
+- expensive workload threshold
+- retry-heavy threshold
+- scoring weights
+- priority thresholds
+
+Tagging rules live in `config/tagging_rules.yml`:
+
+- required tags
+- critical tags
+- tag aliases
+
+If either config file is missing or malformed, the accelerator falls back to safe code defaults and writes a WARN health record.
+
+## Pricing Source
+
+`daily_cost.price_source` can be:
+
+- `LIST_PRICES`: all usage in the grouped row used Databricks list prices.
+- `FALLBACK_DBU_PRICE`: all usage in the grouped row used the configured fallback DBU price.
+- `MIXED`: the grouped row contains both list-priced and fallback-priced usage.
+- `UNKNOWN`: no usable price source was available.
+
+Cost values are estimates and are not a replacement for final invoices.
 
 ## Attribution Logic
 
@@ -73,16 +103,14 @@ priority_score =
   + frequency_score * 0.05
 ```
 
-The score intentionally favors cost impact while still accounting for utilization, reliability, tagging, attribution, and activity frequency.
-
-The weights are defined once in `databricks_finops.scoring.SCORE_WEIGHTS`. The SQL expression used by `optimization_candidates` is generated from that Python constant so the Python unit logic and SQL model stay aligned.
+The default weights are defined in `databricks_finops.scoring.SCORE_WEIGHTS` and mirrored in `config/thresholds.yml`. The SQL expression used by `optimization_candidates` is generated from the active scoring configuration so Python and SQL stay aligned.
 
 ## Deployment Targets
 
 The bundle has two targets:
 
 - `dev`: development mode, paused schedule, deployed under the current user's workspace bundle path.
-- `prod`: production mode, unpaused schedule, deployed under the deployer workspace bundle path. In production, use a service principal CLI profile so ownership and permissions are stable.
+- `prod`: production mode, paused schedule by default, deployed under the deployer workspace bundle path.
 
 Use `commands.ps1` as the canonical local command list and set `DATABRICKS_CONFIG_PROFILE` to the Databricks CLI profile name before running it. The script fails fast when the profile is missing.
 
@@ -108,7 +136,7 @@ Derived lookback-window tables use `CREATE OR REPLACE TABLE`, so reruns determin
 
 `accelerator_run_log` appends one record per step and run.
 
-`accelerator_health` is replaced each run with the latest health checks.
+`accelerator_health` preserves run history. Each run deletes any existing health rows for the current `run_id`, inserts the current health rows, and leaves previous run IDs intact. Dashboard coverage views filter to the latest summary run.
 
 ## Failure And Degradation Behavior
 

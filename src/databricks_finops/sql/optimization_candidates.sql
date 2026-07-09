@@ -38,8 +38,8 @@ signals AS (
         r.estimated_failed_cost,
         r.reliability_category,
         r.confidence AS reliability_confidence,
-        COALESCE(t.missing_required_tag_count, 5) AS missing_required_tag_count,
-        COALESCE(t.missing_critical_tag_count, 3) AS missing_critical_tag_count
+        COALESCE(t.missing_required_tag_count, {default_missing_required_tag_count}) AS missing_required_tag_count,
+        COALESCE(t.missing_critical_tag_count, {default_missing_critical_tag_count}) AS missing_critical_tag_count
     FROM {workload_table} w
     LEFT JOIN {utilization_table} u
         ON w.workspace_id = u.workspace_id
@@ -64,19 +64,19 @@ classified AS (
         CASE
             WHEN attribution_notes LIKE '%SHARED_CLUSTER_ATTRIBUTION%' THEN 'SHARED_CLUSTER_ATTRIBUTION'
             WHEN attribution_quality = 'UNKNOWN' THEN 'UNKNOWN_ATTRIBUTION'
-            WHEN COALESCE(estimated_failed_cost, 0) * {monthly_multiplier} >= 10 THEN 'HIGH_FAILURE_COST'
-            WHEN COALESCE(failure_rate_pct, 0) >= 20 THEN 'HIGH_FAILURE_RATE'
-            WHEN COALESCE(retry_count, 0) >= 5 THEN 'RETRY_HEAVY'
+            WHEN COALESCE(estimated_failed_cost, 0) * {monthly_multiplier} >= {high_failed_cost} THEN 'HIGH_FAILURE_COST'
+            WHEN COALESCE(failure_rate_pct, 0) >= {high_failure_rate_pct} THEN 'HIGH_FAILURE_RATE'
+            WHEN COALESCE(retry_count, 0) >= {retry_heavy_count} THEN 'RETRY_HEAVY'
             WHEN utilization_category = 'HIGH_COST_LOW_UTILIZATION' THEN 'HIGH_COST_LOW_UTILIZATION'
             WHEN utilization_category = 'LOW_UTILIZATION' THEN 'LOW_UTILIZATION'
             WHEN utilization_category = 'MEMORY_BOUND_DO_NOT_DOWNSIZE' THEN 'MEMORY_BOUND'
             WHEN COALESCE(missing_required_tag_count, 0) > 0 THEN 'MISSING_TAGS'
             WHEN utilization_category = 'INSUFFICIENT_DATA'
               OR reliability_category = 'INSUFFICIENT_DATA' THEN 'INSUFFICIENT_DATA'
-            WHEN estimated_monthly_cost >= 100 AND utilization_category = 'HEALTHY_UTILIZATION'
+            WHEN estimated_monthly_cost >= {expensive_monthly_cost} AND utilization_category = 'HEALTHY_UTILIZATION'
               AND COALESCE(failure_rate_pct, 0) < 5
               AND COALESCE(missing_required_tag_count, 0) = 0 THEN 'HEALTHY_EXPENSIVE'
-            WHEN estimated_monthly_cost >= 100 THEN 'EXPENSIVE_WORKLOAD'
+            WHEN estimated_monthly_cost >= {expensive_monthly_cost} THEN 'EXPENSIVE_WORKLOAD'
             ELSE 'REVIEW_REQUIRED'
         END AS issue_type
     FROM signals

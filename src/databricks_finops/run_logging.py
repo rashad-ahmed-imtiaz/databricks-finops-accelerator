@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .spark_utils import qname, sql_string, table_count, timestamp_literal, utc_now
+from .spark_utils import comment_on_table, qname, sql_string, table_count, timestamp_literal, utc_now
 
 
 @dataclass
@@ -111,6 +111,10 @@ def _ensure_run_log_table(spark: Any, catalog: str, schema: str, target: str) ->
 def write_run_log(spark: Any, catalog: str, schema: str, logger: StepLogger) -> None:
     target = qname(catalog, schema, "accelerator_run_log")
     _ensure_run_log_table(spark, catalog, schema, target)
+    try:
+        comment_on_table(spark, target, "Step-level execution log for accelerator runs.")
+    except Exception:
+        pass
 
     if not logger.records:
         return

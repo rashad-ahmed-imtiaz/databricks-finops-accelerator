@@ -5,8 +5,11 @@ WITH
 {latest_jobs_cte}
 usage_rows AS (
     {usage_projection},
-    {fallback_price} AS dbu_price,
-    'FALLBACK_DBU_PRICE' AS row_price_source
+    {fallback_dbu_price} AS dbu_price,
+    CASE
+        WHEN {fallback_dbu_price} > 0 THEN 'FALLBACK_DBU_PRICE'
+        ELSE 'UNKNOWN'
+    END AS row_price_source
     FROM system.billing.usage u
     {job_join}
     WHERE u.usage_date >= current_date() - INTERVAL {lookback_days} DAYS
@@ -37,7 +40,10 @@ SELECT
     ROUND(SUM(usage_quantity * dbu_price), 6) AS estimated_cost,
     {currency_code_sql} AS currency_code,
     {display_currency_sql} AS display_currency,
-    'FALLBACK_DBU_PRICE' AS price_source,
+    CASE
+        WHEN {fallback_dbu_price} > 0 THEN 'FALLBACK_DBU_PRICE'
+        ELSE 'UNKNOWN'
+    END AS price_source,
     CASE
         WHEN is_shared_cluster THEN 'LOW'
         WHEN workload_type IN ('JOB', 'SQL_WAREHOUSE', 'PIPELINE') THEN 'HIGH'

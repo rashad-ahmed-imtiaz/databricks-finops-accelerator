@@ -193,12 +193,26 @@ currency_code = USD
 fallback_dbu_price = 0.55
 compute = serverless
 dev schedule = paused
-prod schedule = unpaused
+prod schedule = paused
 ```
 
 `display_currency` is written to output tables and always matches `currency_code`. The accelerator does not perform FX conversion.
 
 To change the output catalog, schema, lookback window, currency, fallback DBU price, or schedule state, edit `databricks.yml` or target variables before deployment.
+
+Business thresholds live in:
+
+```text
+config/thresholds.yml
+```
+
+Tagging requirements and aliases live in:
+
+```text
+config/tagging_rules.yml
+```
+
+If either file is missing or malformed, the accelerator uses safe built-in defaults and writes a WARN record to `accelerator_health`.
 
 ---
 
@@ -466,8 +480,10 @@ Severity values:
 
 ```text
 INFO
-WARNING
-ERROR
+LOW
+MEDIUM
+HIGH
+CRITICAL
 ```
 
 Optional-source warnings are expected in workspaces where the corresponding System Tables are not enabled or not granted to the job identity.
@@ -537,11 +553,12 @@ Expected values:
 
 ```text
 LIST_PRICES
-FALLBACK_PRICE
+FALLBACK_DBU_PRICE
+MIXED
 UNKNOWN
 ```
 
-`LIST_PRICES` is preferred. `FALLBACK_PRICE` means the configured fallback DBU price was used.
+`LIST_PRICES` is preferred. `FALLBACK_DBU_PRICE` means the configured fallback DBU price was used. `MIXED` means a grouped output row includes both list-price and fallback-priced usage. `UNKNOWN` means no usable price source was available.
 
 ---
 
@@ -565,6 +582,32 @@ Use this table to identify:
 - Average daily cost
 - Attribution quality
 - Cost rank
+
+---
+
+## Understanding attribution quality
+
+`attribution_quality` explains how confidently cost can be tied to a useful workload or owner.
+
+Values:
+
+```text
+HIGH
+MEDIUM
+LOW
+UNKNOWN
+```
+
+Interpretation:
+
+| Value | Meaning |
+| --- | --- |
+| `HIGH` | Strong workload metadata such as job, SQL warehouse, or pipeline is available |
+| `MEDIUM` | Some useful metadata exists, such as cluster or run-as, but attribution is incomplete |
+| `LOW` | Attribution is broad, shared, or requires review |
+| `UNKNOWN` | Useful workload metadata is missing |
+
+Use `attribution_notes` to understand why a row was classified that way.
 
 ---
 
@@ -720,7 +763,7 @@ Important fields:
 | `suggested_action` | Safe recommended review action |
 | `estimated_monthly_cost` | Estimated monthlyized cost |
 | `priority_score` | 0-100 prioritization score |
-| `confidence` | `HIGH`, `MEDIUM`, `LOW`, or `INSUFFICIENT_DATA` |
+| `confidence` | `HIGH`, `MEDIUM`, or `LOW` |
 | `evidence` | Human-readable explanation |
 
 Issue types include:
@@ -756,14 +799,31 @@ REVIEW_REQUIRED
 INSUFFICIENT_DATA
 ```
 
-The accelerator intentionally avoids risky recommendations like:
+The accelerator intentionally avoids destructive or immediate remediation instructions. Suggested actions are review prompts only.
+
+---
+
+## Understanding confidence
+
+`confidence` helps reviewers understand how much evidence supports a candidate.
+
+Values:
 
 ```text
-delete cluster
-terminate job
-downsize immediately
-disable workload
+HIGH
+MEDIUM
+LOW
 ```
+
+Interpretation:
+
+| Value | Meaning |
+| --- | --- |
+| `HIGH` | Strong utilization or reliability evidence exists |
+| `MEDIUM` | Partial optional source evidence exists |
+| `LOW` | Recommendation depends on missing optional sources, fallback pricing, limited telemetry, or insufficient data |
+
+Low confidence does not mean the candidate is wrong. It means the workload should be reviewed with more context before action.
 
 ---
 
@@ -780,7 +840,7 @@ priority_score =
   + frequency_score * 0.05
 ```
 
-The weights are defined once in `databricks_finops.scoring.SCORE_WEIGHTS`. The SQL expression used by `optimization_candidates` is generated from that same Python constant so the Python unit logic and SQL model stay aligned.
+The default weights are defined in `databricks_finops.scoring.SCORE_WEIGHTS` and mirrored in `config/thresholds.yml`. The SQL expression used by `optimization_candidates` is generated from the active scoring configuration so Python and SQL stay aligned.
 
 ---
 
@@ -890,6 +950,7 @@ Production recommendations:
 - Use a service principal Databricks CLI profile for stable ownership.
 - Pre-create the target catalog when possible.
 - Start with the default 30-day lookback.
+- Keep the production schedule paused until a manual production run succeeds.
 - Keep dashboard access limited until a manual production run succeeds.
 - Review `accelerator_health` before exposing dashboards broadly.
 - Tune `config/thresholds.yml` and `config/tagging_rules.yml` to your organization.
@@ -976,7 +1037,7 @@ FROM finops.accelerator.daily_cost
 GROUP BY price_source;
 ```
 
-If many rows use `FALLBACK_PRICE`, check access to:
+If many rows use `FALLBACK_DBU_PRICE`, check access to:
 
 ```text
 system.billing.list_prices

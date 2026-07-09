@@ -28,11 +28,15 @@ The reliability summary estimates DBUs and cost associated with failed jobs, can
 
 Suggested actions are intentionally conservative:
 
-- review worker count
-- review node type
-- investigate memory pressure
-- investigate failures or retries
-- improve tagging
-- review all-purpose usage
+- `REVIEW_WORKER_COUNT`
+- `REVIEW_NODE_TYPE`
+- `INVESTIGATE_MEMORY_PRESSURE`
+- `INVESTIGATE_FAILURES`
+- `INVESTIGATE_RETRIES`
+- `IMPROVE_TAGGING`
+- `REVIEW_ALL_PURPOSE_USAGE`
+- `LOOKS_HEALTHY`
+- `REVIEW_REQUIRED`
+- `INSUFFICIENT_DATA`
 
 The accelerator does not delete, terminate, downsize, or disable anything automatically.

@@ -45,22 +45,29 @@ SELECT
     ROUND(try_divide(c.dbus, m.avg_cpu_pct), 6) AS dbus_per_cpu_pct,
     CASE
         WHEN m.avg_cpu_pct IS NULL THEN 'INSUFFICIENT_DATA'
-        WHEN m.avg_cpu_pct < 20 AND COALESCE(m.avg_memory_pct, 0) < 40 AND c.estimated_cost >= 10
+        WHEN m.avg_cpu_pct < {low_cpu_pct}
+         AND COALESCE(m.avg_memory_pct, 0) < {low_memory_pct}
+         AND c.estimated_cost >= {high_cost_low_utilization_min_cost}
             THEN 'HIGH_COST_LOW_UTILIZATION'
-        WHEN m.avg_cpu_pct < 20 AND COALESCE(m.avg_memory_pct, 0) < 40
+        WHEN m.avg_cpu_pct < {low_cpu_pct}
+         AND COALESCE(m.avg_memory_pct, 0) < {low_memory_pct}
             THEN 'LOW_UTILIZATION'
-        WHEN m.avg_cpu_pct < 40 AND COALESCE(m.avg_memory_pct, 0) >= 80
+        WHEN m.avg_cpu_pct < {low_memory_pct}
+         AND COALESCE(m.avg_memory_pct, 0) >= {high_memory_pct}
             THEN 'MEMORY_BOUND_DO_NOT_DOWNSIZE'
-        WHEN m.avg_cpu_pct >= 40 AND COALESCE(m.avg_memory_pct, 0) < 90
+        WHEN m.avg_cpu_pct >= {low_memory_pct}
+         AND COALESCE(m.avg_memory_pct, 0) < 90
             THEN 'HEALTHY_UTILIZATION'
         ELSE 'REVIEW_REQUIRED'
     END AS utilization_category,
     'CLUSTER_LOOKBACK_WINDOW' AS utilization_grain,
     CASE
         WHEN m.avg_cpu_pct IS NULL THEN 'INSUFFICIENT_DATA'
-        WHEN m.avg_cpu_pct < 20 AND COALESCE(m.avg_memory_pct, 0) < 40 THEN 'REVIEW_WORKER_COUNT'
-        WHEN m.avg_cpu_pct < 40 AND COALESCE(m.avg_memory_pct, 0) >= 80 THEN 'INVESTIGATE_MEMORY_PRESSURE'
-        WHEN m.avg_cpu_pct < 40 THEN 'REVIEW_NODE_TYPE'
+        WHEN m.avg_cpu_pct < {low_cpu_pct}
+         AND COALESCE(m.avg_memory_pct, 0) < {low_memory_pct} THEN 'REVIEW_WORKER_COUNT'
+        WHEN m.avg_cpu_pct < {low_memory_pct}
+         AND COALESCE(m.avg_memory_pct, 0) >= {high_memory_pct} THEN 'INVESTIGATE_MEMORY_PRESSURE'
+        WHEN m.avg_cpu_pct < {low_memory_pct} THEN 'REVIEW_NODE_TYPE'
         ELSE 'LOOKS_HEALTHY'
     END AS sizing_signal,
     CASE

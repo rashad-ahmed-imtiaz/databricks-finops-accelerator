@@ -20,7 +20,8 @@ def build_optimization_candidates_sql(config: AppConfig, run_id: str) -> str:
     target = qname(config.catalog, config.schema, "optimization_candidates")
     run_id_sql = sql_string(run_id)
     multiplier = f"{30.0 / config.lookback_days:.12g}"
-    priority_expr = priority_score_sql_expr()
+    priority_expr = priority_score_sql_expr(weights=config.scoring_weights.as_dict())
+    thresholds = config.thresholds
 
     return load_sql(
         "optimization_candidates",
@@ -32,6 +33,12 @@ def build_optimization_candidates_sql(config: AppConfig, run_id: str) -> str:
         run_id_sql=run_id_sql,
         monthly_multiplier=multiplier,
         lookback_days=str(config.lookback_days),
+        default_missing_required_tag_count=str(len(config.tagging_rules.required_tags)),
+        default_missing_critical_tag_count=str(len(config.tagging_rules.critical_tags)),
+        high_failed_cost=f"{thresholds.high_failed_cost:.12g}",
+        high_failure_rate_pct=f"{thresholds.high_failure_rate_pct:.12g}",
+        retry_heavy_count=f"{thresholds.retry_heavy_count:.12g}",
+        expensive_monthly_cost=f"{thresholds.expensive_monthly_cost:.12g}",
         priority_score_expr=priority_expr,
     )
 
@@ -41,8 +48,7 @@ def comment_optimization_table(spark: Any, config: AppConfig) -> None:
         spark,
         qname(config.catalog, config.schema, "optimization_candidates"),
         (
-            "Business-facing prioritized review backlog. Scores are normalized 0-100 "
-            "and combine estimated monthly cost, utilization, reliability, tagging, "
-            "attribution, and activity frequency. Suggested actions are review prompts only."
+            "Prioritized advisory optimization backlog combining cost, utilization, "
+            "reliability, tagging, attribution, and confidence signals."
         ),
     )

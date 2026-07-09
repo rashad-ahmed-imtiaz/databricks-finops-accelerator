@@ -43,9 +43,29 @@ def _retry_cte(preflight: PreflightResult, config: AppConfig) -> str:
         ),
         """
 
-    distinct_task = "task_run_id" if "task_run_id" in columns else "task_key"
-    if distinct_task not in columns:
-        distinct_task = "run_id"
+    attempt_column = next(
+        (
+            column
+            for column in [
+                "attempt_number",
+                "attempt",
+                "run_attempt",
+                "task_attempt_number",
+                "repair_count",
+            ]
+            if column in columns
+        ),
+        None,
+    )
+    if attempt_column is not None:
+        retry_expr = (
+            f"SUM(CASE WHEN TRY_CAST({attempt_column} AS BIGINT) > 0 THEN 1 ELSE 0 END)"
+        )
+    else:
+        distinct_task = "task_run_id" if "task_run_id" in columns else "task_key"
+        if distinct_task not in columns:
+            distinct_task = "run_id"
+        retry_expr = f"GREATEST(COUNT(*) - COUNT(DISTINCT {distinct_task}), 0)"
 
     return f"""
     task_retries AS (
@@ -53,7 +73,7 @@ def _retry_cte(preflight: PreflightResult, config: AppConfig) -> str:
             workspace_id,
             job_id,
             run_id,
-            GREATEST(COUNT(*) - COUNT(DISTINCT {distinct_task}), 0) AS retry_count
+            {retry_expr} AS retry_count
         FROM system.lakeflow.job_task_run_timeline
         WHERE period_start_time >= current_timestamp() - INTERVAL {config.lookback_days} DAYS
         GROUP BY workspace_id, job_id, run_id
@@ -100,7 +120,7 @@ def _job_name_expr(preflight: PreflightResult) -> str:
 
 
 def _run_cost_cte(config: AppConfig, preflight: PreflightResult) -> str:
-    fallback_price = f"{config.fallback_dbu_price:.12g}"
+    fallback_dbu_price = f"{config.fallback_dbu_price:.12g}"
     currency_code = sql_string(config.currency_code)
 
     if preflight.available("system.billing.list_prices"):
@@ -116,7 +136,7 @@ def _run_cost_cte(config: AppConfig, preflight: PreflightResult) -> str:
                 * COALESCE(
                     TRY_CAST(p.pricing.effective_list.default AS DOUBLE),
                     TRY_CAST(p.pricing.default AS DOUBLE),
-                    {fallback_price}
+                    {fallback_dbu_price}
                 )
             ), 6) AS estimated_cost
         FROM system.billing.usage u
@@ -148,7 +168,7 @@ def _run_cost_cte(config: AppConfig, preflight: PreflightResult) -> str:
             u.usage_metadata.job_id AS job_id,
             u.usage_metadata.job_run_id AS run_id,
             ROUND(SUM(CAST(u.usage_quantity AS DOUBLE)), 6) AS dbus,
-            ROUND(SUM(CAST(u.usage_quantity AS DOUBLE) * {fallback_price}), 6) AS estimated_cost
+            ROUND(SUM(CAST(u.usage_quantity AS DOUBLE) * {fallback_dbu_price}), 6) AS estimated_cost
         FROM system.billing.usage u
         WHERE u.usage_date >= current_date() - INTERVAL {config.lookback_days} DAYS
           AND u.usage_unit = 'DBU'
@@ -184,6 +204,8 @@ def build_job_reliability_sql(
         job_name_expr=job_name_expr,
         latest_jobs_join=latest_jobs_join,
         lookback_days=str(config.lookback_days),
+        retry_heavy_count=f"{config.thresholds.retry_heavy_count:.12g}",
+        high_failure_rate_pct=f"{config.thresholds.high_failure_rate_pct:.12g}",
         run_id_sql=run_id_sql,
     )
 
@@ -215,7 +237,6 @@ def comment_reliability_table(spark: Any, config: AppConfig) -> None:
         spark,
         qname(config.catalog, config.schema, "job_reliability_summary"),
         (
-            "Job reliability summary from Lakeflow system tables when available. "
-            "Failure and retry cost impact is estimated from billing usage attribution."
+            "Job reliability metrics derived from Lakeflow job run system tables where available."
         ),
     )

@@ -25,11 +25,15 @@ def build_accelerator_summary_sql(config: AppConfig, run_id: str) -> str:
 
 
 def comment_summary_table(spark: Any, config: AppConfig) -> None:
-    comment_on_table(
-        spark,
-        qname(config.catalog, config.schema, "accelerator_summary"),
-        (
+    comments = {
+        "accelerator_summary": (
             "Executive FinOps summary for the latest accelerator run. Cost values are "
             "estimated from Databricks System Tables and are not exact invoices."
         ),
-    )
+        "accelerator_health": (
+            "Health checks showing source table coverage, pricing quality, attribution "
+            "quality, and output limitations."
+        ),
+    }
+    for table_name, comment in comments.items():
+        comment_on_table(spark, qname(config.catalog, config.schema, table_name), comment)

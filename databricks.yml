@@ -23,6 +23,9 @@ variables:
   currency_code:
     default: USD
 
+  display_currency:
+    default: USD
+
   fallback_dbu_price:
     default: 0.55
 
@@ -38,6 +41,7 @@ targets:
       schema: accelerator
       lookback_days: 30
       currency_code: USD
+      display_currency: USD
       fallback_dbu_price: 0.55
       pause_status: PAUSED
     workspace:
@@ -50,7 +54,8 @@ targets:
       schema: accelerator
       lookback_days: 30
       currency_code: USD
+      display_currency: USD
       fallback_dbu_price: 0.55
-      pause_status: UNPAUSED
+      pause_status: PAUSED
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

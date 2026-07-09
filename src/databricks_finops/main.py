@@ -31,6 +31,19 @@ def _comment_tables(spark, config) -> str:
     return "table comments applied"
 
 
+def _write_health(spark: Any, config: AppConfig, run_id: str, preflight: PreflightResult, logger: StepLogger) -> None:
+    kwargs = {"config_warnings": config.config_warnings} if config.config_warnings else {}
+    write_health(
+        spark,
+        config.catalog,
+        config.schema,
+        run_id,
+        preflight,
+        logger,
+        **kwargs,
+    )
+
+
 def run_pipeline(
     spark: Any,
     config: AppConfig,
@@ -98,14 +111,7 @@ def run_pipeline(
         )
         logger.run(
             "build_accelerator_health",
-            lambda: write_health(
-                spark,
-                config.catalog,
-                config.schema,
-                run_id,
-                preflight_result,
-                logger,
-            ),
+            lambda: _write_health(spark, config, run_id, preflight_result, logger),
             spark=spark,
             count_table=qname(config.catalog, config.schema, "accelerator_health"),
         )
@@ -122,14 +128,7 @@ def run_pipeline(
     except Exception:
         if preflight_result is not None:
             try:
-                write_health(
-                    spark,
-                    config.catalog,
-                    config.schema,
-                    run_id,
-                    preflight_result,
-                    logger,
-                )
+                _write_health(spark, config, run_id, preflight_result, logger)
             except Exception:
                 pass
         raise

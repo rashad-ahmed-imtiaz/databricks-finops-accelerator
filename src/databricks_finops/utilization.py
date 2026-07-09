@@ -29,6 +29,7 @@ def build_compute_utilization_sql(
     preflight: PreflightResult,
 ) -> str:
     node_columns = preflight.columns("system.compute.node_timeline")
+    thresholds = config.thresholds
     return load_sql(
         "compute_utilization_summary",
         target_table=qname(config.catalog, config.schema, "compute_utilization_summary"),
@@ -46,6 +47,12 @@ def build_compute_utilization_sql(
             ["network_received_bytes", "network_bytes_received", "network_received"],
         ),
         lookback_days=str(config.lookback_days),
+        low_cpu_pct=f"{thresholds.low_cpu_pct:.12g}",
+        low_memory_pct=f"{thresholds.low_memory_pct:.12g}",
+        high_memory_pct=f"{thresholds.high_memory_pct:.12g}",
+        high_cost_low_utilization_min_cost=(
+            f"{thresholds.high_cost_low_utilization_min_cost:.12g}"
+        ),
     )
 
 
@@ -72,7 +79,7 @@ def comment_utilization_table(spark: Any, config: AppConfig) -> None:
         spark,
         qname(config.catalog, config.schema, "compute_utilization_summary"),
         (
-            "Cluster-level utilization summary from system.compute.node_timeline when available. "
-            "Signals are review prompts, not automatic downsizing instructions."
+            "Compute utilization and sizing signals derived from system.compute.node_timeline "
+            "where available."
         ),
     )

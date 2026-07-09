@@ -71,11 +71,11 @@ SELECT
     MAX_BY(result_state, run_start_time) AS last_run_result_state,
     CASE
         WHEN COUNT(DISTINCT run_id) = 0 THEN 'INSUFFICIENT_DATA'
-        WHEN SUM(retry_count) >= 5 THEN 'RETRY_HEAVY'
+        WHEN SUM(retry_count) >= {retry_heavy_count} THEN 'RETRY_HEAVY'
         WHEN 100.0 * try_divide(
             SUM(CASE WHEN result_state IN ('FAILED', 'TIMED_OUT', 'ERROR') THEN 1 ELSE 0 END),
             COUNT(DISTINCT run_id)
-        ) >= 20 THEN 'FAILURE_HEAVY'
+        ) >= {high_failure_rate_pct} THEN 'FAILURE_HEAVY'
         WHEN SUM(CASE WHEN result_state IS NULL THEN 1 ELSE 0 END) > 0 THEN 'REVIEW_REQUIRED'
         ELSE 'HEALTHY'
     END AS reliability_category,

@@ -33,16 +33,10 @@ scored AS (
     SELECT
         *,
         (
-            CASE WHEN missing_project_tag THEN 1 ELSE 0 END
-            + CASE WHEN missing_team_tag THEN 1 ELSE 0 END
-            + CASE WHEN missing_owner_tag THEN 1 ELSE 0 END
-            + CASE WHEN missing_environment_tag THEN 1 ELSE 0 END
-            + CASE WHEN missing_cost_center_tag THEN 1 ELSE 0 END
+            {required_tag_count_expr}
         ) AS missing_required_tag_count,
         (
-            CASE WHEN missing_owner_tag THEN 1 ELSE 0 END
-            + CASE WHEN missing_team_tag THEN 1 ELSE 0 END
-            + CASE WHEN missing_cost_center_tag THEN 1 ELSE 0 END
+            {critical_tag_count_expr}
         ) AS missing_critical_tag_count
     FROM flags
 ),
@@ -52,8 +46,8 @@ classified AS (
         CASE
             WHEN workload_id = 'UNKNOWN' THEN 'UNKNOWN'
             WHEN missing_required_tag_count = 0 THEN 'GOOD'
-            WHEN missing_required_tag_count <= 2 THEN 'PARTIAL'
-            WHEN missing_required_tag_count < 5 THEN 'POOR'
+            WHEN missing_required_tag_count <= {partial_missing_required_tag_count} THEN 'PARTIAL'
+            WHEN missing_required_tag_count < {missing_required_tag_count} THEN 'POOR'
             ELSE 'MISSING'
         END AS tagging_quality
     FROM scored

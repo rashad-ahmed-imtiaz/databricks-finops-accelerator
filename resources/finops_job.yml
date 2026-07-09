@@ -2,6 +2,10 @@ resources:
   jobs:
     finops_accelerator_job:
       name: "[${bundle.target}] Databricks FinOps Accelerator"
+      max_concurrent_runs: 1
+
+      queue:
+        enabled: true
 
       schedule:
         quartz_cron_expression: "0 0 8 * * ?"
